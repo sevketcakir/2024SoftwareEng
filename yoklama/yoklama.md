@@ -5,5 +5,5 @@
 22253021 Ayberk Kırım <br/>
 Öğrenci numaram yok: Şevket Umut ÇAKIR <br/>
 22253029 Eren Küçük <br/>
-18253021 Beyza Nur Karakaya
+18253021 Beyza Nur Karakaya <br/>
 21253023 Recep Kemal Kef
