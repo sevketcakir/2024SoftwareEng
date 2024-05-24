@@ -7,21 +7,37 @@ import java.awt.event.ActionListener;
 import java.util.List;
 import java.util.Stack;
 
+/**
+ * GUI sınıfı
+ */
 public class ListTreeDemo extends JFrame {
+    // GUI liste nesnesi
     private JList<String> list;
+    // Liste modeli(ekleme, silme vb. işlemleri için)
     private DefaultListModel<String> listModel;
+    // GUI ağaç nesnesi
     private JTree tree;
+    // Ağaç modeli(ekleme, silme vb. işlemleri için)
     private DefaultTreeModel treeModel;
+    // Ağacın kök düğümü
     private DefaultMutableTreeNode rootNode;
-    private Stack<CommandAction> commandStack;
+    // Undo yığıtı(eski adı commandStack)
+    private Stack<CommandAction> undoStack;
+    // Redo yığıtı
+    private Stack<CommandAction> redoStack;
 
+    /**
+     * Pencereyi oluştur ve bileşenleri ekle
+     */
     public ListTreeDemo() {
         setTitle("List and Tree Example");
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         setSize(400, 300);
         setLocationRelativeTo(null);
 
-        commandStack = new Stack<>();
+        // Yığıtları oluştur
+        undoStack = new Stack<>();
+        redoStack = new Stack<>();
 
         // Initialize list model and list
         listModel = new DefaultListModel<>();
@@ -53,9 +69,19 @@ public class ListTreeDemo extends JFrame {
             }
         });
 
+        JButton redoButton = new JButton("Redo");
+        redoButton.addActionListener(new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                redoLastAction();
+            }
+        });
+
+        // Buttonlar tek bir panelde
         JPanel buttonPanel = new JPanel();
         buttonPanel.add(createButton);
         buttonPanel.add(undoButton);
+        buttonPanel.add(redoButton);
 
         // Layout the components
         JSplitPane splitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, new JScrollPane(list), new JScrollPane(tree));
@@ -65,16 +91,44 @@ public class ListTreeDemo extends JFrame {
         getContentPane().add(buttonPanel, BorderLayout.SOUTH);
     }
 
+    /**
+     * Command nesnesi ile listeden silip ağaca ekler
+     */
     private void createTreeFromSelection() {
+        // Command nesnesi oluştur
         CreateAction action = new CreateAction(list, tree);
+        // Eylemi gerçekleştir
         action.execute();
-        commandStack.push(action);
+        // Nesneyi undoStack'e ekle
+        undoStack.push(action);
+        // redoStack'i temizle
+        redoStack.clear();
     }
 
+    /**
+     * Son işlemi geri alır
+     */
     public void undoLastAction() {
-        if (!commandStack.isEmpty()) {
-            CommandAction action = commandStack.pop();
+        if (!undoStack.isEmpty()) {
+            //Son eylemi yığıttan çek
+            CommandAction action = undoStack.pop();
+            // Eylemi geri al
             action.undo();
+            // Eylemi redoStack'e ekle
+            redoStack.push(action);
+        }
+    }
+    /**
+     * Geri alınan işlemi yeniden yapar
+     */
+    public void redoLastAction() {
+        if (!redoStack.isEmpty()) {
+            // Son geri alınan işlemi yığıttan çek
+            CommandAction action = redoStack.pop();
+            // Eylemi yeniden yap
+            action.redo();
+            // Eylemi yapılanlar yığıtına ekle
+            undoStack.push(action);
         }
     }
 
@@ -88,24 +142,73 @@ public class ListTreeDemo extends JFrame {
     }
 }
 
+/**
+ * Command arayüzü
+ */
 interface CommandAction {
+    // Eylemi gerçekleştir
     public void execute();
+    // Geri al
     public void undo();
+    // Yeniden yap
     public void redo();
 }
 
+
+/**
+ * Listeden silip ağaca ekleyen Command katı(concrete, soyut değil) sınıfı
+ */
 class CreateAction implements CommandAction {
+    // GUI Liste nesnesi
     private JList<String> list;
+    // GUI Ağaç nesnesi
     private JTree tree;
+    // Listeden(GUI) silinen elemanların listesi
     private List<String> removedElements;
+    // Silinen elemanların listedeki başlangıç indisi
     private int removedIndex;
+    // Ağaca eklenen düğüm nesnesi
     private DefaultMutableTreeNode newNode;
 
+    /**
+     * Constructor
+     * @param list GUI Liste nesnesi
+     * @param tree GUI Ağaç nesnesi
+     */
     public CreateAction(JList<String> list, JTree tree) {
         this.list = list;
         this.tree = tree;
     }
 
+    /**
+     * Seçili elemanları listeden silip ağaca ekleyen metot
+     * Seçili elemanlar removedElements listesine yazılır
+     */
+    public void transfer() {
+        // İlk elemanı kök, diğerlerini çocuk olarak belirler
+        DefaultMutableTreeNode newRootNode = new DefaultMutableTreeNode(removedElements.get(0));
+        for (int i = 1; i < removedElements.size(); i++) {
+            newRootNode.add(new DefaultMutableTreeNode(removedElements.get(i)));
+        }
+
+        newNode = newRootNode;
+        // Ağaç modelini al ve düğümü ekle
+        DefaultTreeModel treeModel = (DefaultTreeModel) tree.getModel();
+        DefaultMutableTreeNode rootNode = (DefaultMutableTreeNode) treeModel.getRoot();
+        rootNode.add(newRootNode);
+        treeModel.reload();
+        // Liste modelini al
+        DefaultListModel<String> listModel = (DefaultListModel<String>) list.getModel();
+        // Seçili elemanları listeden sil
+        for (String value : removedElements) {
+            listModel.removeElement(value);
+        }
+    }
+
+    /**
+     * Transfer işlemi için ilgili değişkenleri hazırlar ve transfer
+     * metodunu çağırır
+     */
     @Override
     public void execute() {
         List<String> selectedValuesList = list.getSelectedValuesList();
@@ -114,25 +217,12 @@ class CreateAction implements CommandAction {
         int[] indices = list.getSelectedIndices();
         removedIndex = indices[0];
 
-        DefaultMutableTreeNode newRootNode = new DefaultMutableTreeNode(selectedValuesList.get(0));
-        for (int i = 1; i < selectedValuesList.size(); i++) {
-            newRootNode.add(new DefaultMutableTreeNode(selectedValuesList.get(i)));
-        }
-
-        newNode = newRootNode;
-
-        DefaultTreeModel treeModel = (DefaultTreeModel) tree.getModel();
-        DefaultMutableTreeNode rootNode = (DefaultMutableTreeNode) treeModel.getRoot();
-        rootNode.add(newRootNode);
-        treeModel.reload();
-
-        DefaultListModel<String> listModel = (DefaultListModel<String>) list.getModel();
-        // Remove selected items from the list
-        for (String value : selectedValuesList) {
-            listModel.removeElement(value);
-        }
+        transfer();
     }
 
+    /**
+     * Geri alma işini yapar
+     */
     @Override
     public void undo() {
         // Add to JList
@@ -148,8 +238,11 @@ class CreateAction implements CommandAction {
         treeModel.reload(rootNode);
     }
 
+    /**
+     * Eylemi yeniden yapar
+     */
     @Override
     public void redo() {
+        transfer();
     }
-
 }
